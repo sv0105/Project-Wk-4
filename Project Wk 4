@@ -1,0 +1,93 @@
+#Loading excel and forecast packages
+library(readxl)
+library(forecast)
+
+#importing excel file
+FRED <- read.csv("C:/Users/Veere/Downloads/fred.csv")
+
+#DEFINE TIME SERIES
+CPI = FRED$Consumer.Price.Index
+CV <- length(CPI)
+
+#timeseries creation for consumer price index
+CPI.ts <- ts(CPI, start = c(2009,2), end = c(2023,1), freq = 12)
+
+CPI.data <- data.frame(CPI)
+
+# DESCRIPTIVE STATISTICS
+# NOTE:  I am using "pastecs" package for this
+# install.packages(pastecs) # <--- if necessary
+library(pastecs)
+ds <- stat.desc(CPI.data, basic = F)
+round(ds, 5)
+
+# DATA PLOTS
+
+#Raw data
+plot(CPI.ts, type = 'l', xlab = 'Date', ylab = 'CPI', main = 'CPI History', lty = 1, lwd = 2, col = 'red')
+
+# PARTITIONING
+library(forecast)
+nValid <- 60 # This is a 5-year training period
+nTrain <- length(CPI.ts) - nValid
+train.ts <- window(CPI.ts, start = c(2009, 2), end = c(2023, nTrain))
+valid.ts <- window(CPI.ts, start = c(2009, nTrain + 1), end = c(2023, nTrain + nValid))
+CPI.lm <-  tslm(train.ts ~ trend + I(trend^2))
+CPI.lm.pred <- forecast(CPI.lm, h = nValid, level = 95)
+
+# RECREATE FIG. 5.2 FOR Consumer Price Index
+library(zoo)
+ma.trailing <- rollmean(CPI.ts, k = 24, align = "right")
+ma.centered <- ma(CPI.ts, order = 24)
+plot(CPI.ts, ylim = c(-1, 1),  ylab = 'Consumer Price Index', xlab = 'Date', 
+     bty = "l", lwd = 2, xaxt = "n", xlim = c(2009, 2023), main = 'Moving Averages',)
+axis(1, at = seq(2009,2024, 1), labels = format(seq(2009, 2024, 1)))
+lines(ma.centered, lwd = 3, lty = 2, col = 'red')
+lines(ma.trailing, lwd = 3, lty = 3, col = 'blue')
+legend(2009 ,1000, c("Raw Data","Centered Moving Average", "Trailing Moving Average"), lty=c(1,2,3), lwd=c(2,2,2), bty = "n") 
+
+
+# RECREATE FIG. 5.3 FOR Consumer Price Index
+nValid <- 60
+nTrain <- length(CPI.ts) - nValid
+train.ts <- window(CPI.ts, start = c(2009, 2), end = c(2023, nTrain))
+valid.ts <- window(CPI.ts, start = c(2009, nTrain + 1), end = c(2023, nTrain + nValid), freq = 12)
+ma.trailing <- rollmean(train.ts, k = 60, align = "right")
+last.ma <- tail(ma.trailing, 1)
+ma.trailing.pred <- ts(rep(last.ma, nValid), start = c(2009, nTrain + 1), 
+                       end = c(2023, nTrain + nValid), freq = 12)
+plot(train.ts, ylim = c(-1, 1),  ylab = 'Consumer Price Index', xlab = 'Date',
+     lwd = 2, bty = "l", xaxt = "n", xlim = c(2009, 2027), main = 'Moving Average Forecast')
+axis(1, at = seq(2009, 2027, 10), labels = format(seq(2009, 2027, 10)))
+lines(ma.trailing, lwd = 2, col = 'red') 
+lines(ma.trailing.pred, lwd = 2, col = "blue", lty = 2) 
+lines(valid.ts, lwd = 2)
+lines(c(2022 - nValid/12, 2022 - nValid/12), c(-1, 1)) 
+lines(c(2022, 2022), c(-1, 1))
+text(2009, -0.5, "Training")
+text(2020, 0.5, "Validation")
+text(2023, 1, "Future")
+arrows(2009, 1, 2022 - nValid/12, 1, code = 3, length = 0.1, lwd = 1,angle = 25)
+arrows(2022 - nValid/12, 0.5, 2022, 0.5, code = 3, length = 0.1, lwd = 1,angle = 25)
+arrows(2022, -1, 2022 + nValid/12, -1, code = 3, length = 0.1, lwd = 1,angle = 25)
+
+
+# RECREATE FIG. 5.6 FOR Consumer Price Index
+hwin <- ets(train.ts, model = "AAN")
+hwin.pred <- forecast(hwin, h = nValid, level = 0) 
+
+plot(hwin.pred, ylim = c(-1, 1),  ylab = "COnsumer Price Index", xlab = "Date", bty = "l", xaxt = "n", xlim = c(2009,2028), lwd= 2, main = 'Exponential Smoothing Forecast', flty = 2)
+axis(1, at = seq(2009, 2030, 1), labels = format(seq(2009, 2030, 1)))
+lines(hwin.pred$fitted, lwd = 1, col = "red")
+lines(valid.ts, lwd = 2)
+lines(c(2023 - nValid/12, 2023 - nValid/12), c(-1,1)) 
+lines(c(2023, 2023), c(-1, 1))
+text(2004, 0.4, "Training")
+text(2023 - nValid/12/2, 0.5, "Validation")
+text(2023 + 3, 1, "Future")
+arrows(2009, 0.3, 2023 - nValid/12, 0.3, code = 3, length = 0.1, lwd = 1,angle = 25)
+arrows(2023 - nValid/12, 0.4, 2023, 0.4, code = 3, length = 0.1, lwd = 1,angle = 25)
+arrows(2023, 0.7, 2023 + nValid/12, 0.7, code = 3, length = 0.1, lwd = 1,angle = 25)
+
+accuracy(hwin.pred)
+accuracy(ma.trailing.pred,valid.ts)
